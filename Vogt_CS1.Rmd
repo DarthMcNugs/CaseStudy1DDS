@@ -1,0 +1,521 @@
+---
+title: "Case Study 1 Frito-Lay Attrition"
+author: "Johnny Vogt"
+date: "2025-02-22"
+output: html_document
+---
+#DDSAnalytics Specializes in Talent Management
+#Identify factors related to attrition. 
+#Aim to predict employee attrition
+#Create a model to predict attrition and be able to measure cost/savings by the model's impact
+#An extra 200 dollars was estimated that they use to keep employees about to leave 
+#Identify TOP 3 factors that contribute to turnover
+#Derived Attributes?
+#Notate other trends and observations
+#School Deliverables - Powerpoint, RMD File, and 7-Minute Presentation. Put link in RMD File
+
+#library
+library(ggplot2)
+library(ggthemes)
+library(tidyverse)
+library(dplyr)
+library(e1071)
+library(caret)
+library(class)
+
+#Bringing Frito-Lay Employee Data
+cs_1 <- read_csv("C:/Users/jvogt/Desktop/School/SMU/DS6306/Project_1/CaseStudy1-data.csv")
+cs_1_attritioned <- cs_1 %>% filter(cs_1$Attrition == "Yes")
+
+#Molding Data
+##Education
+education_levels <- c("Below College", "College", "Bachelor", "Master", "Doctor")
+cs_1$Education <- factor(case_when(
+  cs_1$Education == 1 ~ "Below College",
+  cs_1$Education == 2 ~ "College",
+  cs_1$Education == 3 ~ "Bachelor",
+  cs_1$Education == 4 ~ "Master",
+  cs_1$Education == 5 ~ "Doctor"
+), levels = education_levels)
+
+##Changing Distance from Work
+cs_1 <- cs_1 %>% 
+  mutate(DistancefromHome_category = cut(DistanceFromHome, breaks = c(-Inf,1,5,10,20,Inf), labels = c("0-1 Miles","2-5 Miles", "6-10 Miles", "10-20 Miles", "20+ Miles")))
+
+##Changing Stock Option to Yes or No
+cs_1 <- cs_1 %>% 
+  mutate(StockOptionLevel_Bin = cut(DistanceFromHome, breaks = c(-Inf,1,Inf), labels = c("No","Yes")))
+
+##Making Years at work into a categorical 
+cs_1 <- cs_1 %>% 
+  mutate(YearsAtCompany_Category = cut(YearsAtCompany, breaks = c(-Inf,2,6,10,20,Inf), labels = c("0-2 Years","3-6 Years", "7-10 years", "11-20 Years", "20+ Years")))
+
+##Making Joblevel into Factor
+job_levels <- c("One", "Two", "Three", "Four", "Five")
+cs_1$JobLevel_Category <- factor(cs_1$JobLevel,
+                levels = 1:5,
+                labels = job_levels)
+
+#Checking relationship between Age and Monthly Income
+cs_1 %>% 
+  ggplot(mapping = aes(x = Age, y = MonthlyIncome, color = Attrition)) +
+  geom_point()
+
+#Age and others
+
+cs_1 %>%
+  group_by(MaritalStatus) %>%
+  ggplot(mapping = aes(x = Age, fill = StockOptionLevel_Bin)) +
+  geom_bar()
+  
+
+#Checking which Department had the most Attrition
+
+cs_1 %>%
+  group_by(Department) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Checking with Ed Level had the most Attrition
+cs_1 %>%
+  ggplot(mapping = aes(y = MonthlyIncome, x = Education)) +
+  geom_violin()
+  
+cs_1 %>%
+  group_by(Education) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Distance and Attrition
+cs_1 %>%
+  ggplot(aes(x = MonthlyIncome, color=DistancefromHome_category )) +
+  geom_freqpoly(binwidth = 1000) 
+
+cs_1 %>%
+  ggplot(aes(x = DistanceFromHome, fill = Attrition)) +
+  geom_histogram(binwidth = 1)
+
+cs_1 %>%
+  ggplot(aes(x = DistancefromHome_category)) +
+  geom_bar(aes(fill = Attrition))
+
+cs_1 %>%
+  ggplot(aes(x = DistancefromHome_category, y = MonthlyIncome, color= Attrition)) +
+  geom_violin()+
+  geom_boxplot()
+
+cs_1 %>% 
+  group_by(DistancefromHome_category) %>%
+  summarise(
+    Total = n(),
+    AttritionCount = sum(Attrition == "Yes"),
+    AttritionRate = AttritionCount / Total * 100
+  ) %>%
+  ggplot(aes(x = DistancefromHome_category, y = AttritionRate)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  geom_text(aes(label = sprintf("%.1f%%", AttritionRate)), vjust = -0.5)
+
+#geom_bar()#Distance and Monthly income seperated by attrition
+cs_1 %>%
+  ggplot(aes(x = DistanceFromHome, y = MonthlyIncome, color = Attrition)) +
+  geom_point()
+
+#Monthly income boxplot
+cs_1 %>%
+  ggplot(mapping = aes(x = MonthlyIncome, y = Department, fill = Attrition)) +
+  geom_boxplot() +
+  ggtitle("Monthly Income")
+
+#Environment Satisfaction
+cs_1 %>%
+  group_by(MaritalStatus) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Education Field
+cs_1 %>%
+  group_by(EducationField) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Job Role
+cs_1 %>%
+  group_by(JobRole) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Work Travel
+cs_1 %>%
+  group_by(BusinessTravel) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#JobSatisfaction
+cs_1 %>%
+  group_by(JobSatisfaction) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Gender Studies
+cs_1 %>%
+  ggplot(aes(x = HourlyRate, color=Gender )) +
+  geom_freqpoly(binwidth = 2)
+
+cs_1 %>%
+  group_by(Gender) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>% 
+  filter(cs_1$Gender == "Female") %>%
+  group_by(MaritalStatus) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>% 
+  filter(cs_1$Gender == "Male") %>%
+  group_by(MaritalStatus) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>% 
+  filter(cs_1$Gender == "Male") %>%
+  group_by(RelationshipSatisfaction) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>% 
+  filter(cs_1$Gender == "Female") %>%
+  group_by(RelationshipSatisfaction) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>% 
+  filter(cs_1$Gender == "Female") %>%
+  group_by(StockOptionLevel_Bin) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>% 
+  filter(cs_1$Gender == "Male") %>%
+  group_by(StockOptionLevel_Bin) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>%
+  filter(cs_1$Gender == "Male") %>%
+  ggplot(mapping = aes(x = MonthlyIncome, y = JobRole, fill = Attrition)) +
+  geom_boxplot() +
+  ggtitle("Male Monthly Income")
+  
+cs_1 %>%
+  filter(cs_1$Gender == "Female") %>%
+  ggplot(mapping = aes(x = MonthlyIncome, y = JobRole, fill = Attrition)) +
+  geom_boxplot() +
+  ggtitle("Female Monthly Income")
+
+cs_1 %>%
+  ggplot(mapping = aes(x = Gender, y = MonthlyIncome, color = Attrition)) +
+  geom_point(position = "jitter")
+
+cs_1 %>%
+  filter(cs_1$Gender == "Female") %>%
+  ggplot(mapping = aes(x = MonthlyIncome, y = Department, fill = Attrition)) +
+  geom_boxplot() +
+  ggtitle("Female Monthly Income")
+
+cs_1 %>%
+  filter(cs_1$Gender == "Male") %>%
+  ggplot(mapping = aes(x = MonthlyIncome, y = Department, fill = Attrition)) +
+  geom_boxplot() +
+  ggtitle("Male Monthly Income")
+
+
+
+#NumCompaniesWorked
+cs_1 %>%
+  group_by(NumCompaniesWorked) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Total Working Years
+cs_1 %>%
+  group_by(TotalWorkingYears) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#WorkLifeBalance
+cs_1 %>%
+  group_by(WorkLifeBalance) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Stockoption ; Why do 3s leave alot more? More educated, management, able to find better jobs?
+cs_1 %>%
+  group_by(StockOptionLevel) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Salary Raise?
+cs_1 %>%
+  group_by(PercentSalaryHike) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>%
+  ggplot(mapping = aes(x = JobRole , y = PercentSalaryHike, fill = Attrition )) + 
+  geom_boxplot() 
+
+
+#Trainign provided?
+cs_1 %>%
+  group_by(TrainingTimesLastYear) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Years at Company, need to create factors
+cs_1 %>%
+  group_by(YearsAtCompany) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>%
+  group_by(YearsAtCompany_Category) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Years with current role, may need to cross this with perfomance metric
+cs_1 %>%
+  group_by(YearsInCurrentRole) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Current Man
+cs_1 %>%
+  group_by(YearsWithCurrManager) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#Job Level
+cs_1 %>%
+  group_by(JobLevel) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>%
+  ggplot(mapping = aes(x = JobLevel_Category, y = MonthlyIncome, fill = Attrition )) + #####Make Joblevel into categorical
+  geom_boxplot()
+
+#Distance from Home
+cs_1 %>%
+  group_by(DistancefromHome_category) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+cs_1 %>%
+  ggplot(mapping = aes(x = DistancefromHome_category, y = MonthlyIncome, fill = Attrition )) + 
+  geom_boxplot()
+
+#Relation to manager
+cs_1 %>%
+  group_by(RelationshipSatisfaction) %>%
+  summarize(
+    Total = n(),
+    Attritioned = sum(Attrition == "Yes"),
+    Percentage = (Attritioned / Total) * 100
+  )
+
+#AGE
+cs_1 %>%
+  ggplot(mapping = aes(x = Age, y = MonthlyIncome, colour = Attrition )) + 
+  geom_point()
+
+#Playing with Only Attritioned Folks
+cs_1_attritioned %>% 
+  ggplot(mapping = aes(x = BusinessTravel)) +
+  geom_bar()
+
+cs_1_attritioned %>% 
+  ggplot(mapping = aes(x = MonthlyIncome)) +
+  geom_histogram(binwidth = 1000)
+
+cs_1_attritioned %>% 
+  ggplot(mapping = aes(x = MonthlyRate)) +
+  geom_histogram()
+
+cs_1_attritioned %>% 
+  ggplot(mapping = aes(x = HourlyRate)) +
+  geom_histogram()
+
+cs_1_attritioned %>% 
+  ggplot(mapping = aes(x = JobLevel)) +
+  geom_bar()
+
+cs_1_attritioned %>% 
+  ggplot(mapping = aes(x = Age)) +
+  geom_bar()
+
+cs_1_attritioned %>%
+  ggplot(mapping = aes(x = Age, y = MonthlyIncome, color = YearsAtCompany_Category)) + 
+  geom_point()
+
+cs_1_attritioned %>%
+  ggplot(mapping = aes(x = Age, y = MonthlyIncome, color = JobLevel_Category)) + 
+  geom_point()
+
+#Modeling
+##KNN
+
+iterations_knn = 500
+numks = 90
+splitPerc_knn = .95
+
+masterAcc_knn = matrix(nrow = iterations_knn, ncol = numks)
+masterSen_knn = matrix(nrow = iterations_knn, ncol = numks)
+masterSpec_knn = matrix(nrow = iterations_knn, ncol = numks)
+
+for(j in 1:iterations_knn)
+{
+  trainIndices_knn = sample(1:dim(cs_1)[1],round(splitPerc_knn * dim(cs_1)[1]))
+  train_knn = cs_1[trainIndices_knn,]
+  test_knn = cs_1[-trainIndices_knn,]
+  for(i in 1:numks)
+  {
+    #monthly income and distance from home classifications_knn = knn(train_knn[,c(7,15)],test_knn[,c(7,15)],train_knn$Attrition, prob = TRUE, k = i)
+    #classifications_knn = knn(train_knn[,c("Age", "MonthlyIncome")],test_knn[,c("Age", "MonthlyIncome")],train_knn$Attrition, prob = TRUE, k = i)
+    #classifications_knn = knn(train_knn[,c("Age", "YearsAtCompany")],test_knn[,c("Age", "YearsAtCompany")],train_knn$Attrition, prob = TRUE, k = i)
+    #classifications_knn = knn(train_knn[,c("YearsAtCompany", "JobLevel")],test_knn[,c("YearsAtCompany", "JobLevel")],train_knn$Attrition, prob = TRUE, k = i)
+    classifications_knn = knn(train_knn[,c("YearsAtCompany", "MonthlyIncome")],test_knn[,c("YearsAtCompany", "MonthlyIncome")],train_knn$Attrition, prob = TRUE, k = i)
+    table(classifications_knn,test_knn$Attrition)
+    CM_knn = confusionMatrix(table(classifications_knn,test_knn$Attrition))
+    masterAcc_knn[j,i] = CM_knn$overall[1]
+    masterSpec_knn[j,i] = CM_knn$byClass["Specificity"]
+    masterSen_knn[j,i] = CM_knn$byClass["Sensitivity"]
+  }
+}
+
+MeanAcc_knn = colMeans(masterAcc_knn)
+MeanSpec_knn = colMeans(masterSpec_knn)
+MeanSen_knn = colMeans(masterSen_knn)
+
+plot(seq(1,numks,1),MeanAcc_knn, type = "l", main = "Mean Accuracy of Each K Value",
+     xlab = "K Value", ylab = "Accuracy") 
+plot(seq(1,numks,1),MeanSpec_knn, type = "l", main = "Mean Specificity of Each K Value",
+     xlab = "K Value", ylab = "Accuracy")
+plot(seq(1,numks,1),MeanSen_knn, type = "l", main = "Mean Sensitivvity of Each K Value",
+     xlab = "K Value", ylab = "Accuracy")
+
+
+
+##NB
+#NB Loop for average of many training / test partition
+
+iterations_nb = 500
+
+masterAcc_nb = matrix(nrow = iterations_nb)
+Sen_nb = matrix(nrow = iterations_nb)
+Spec_nb = matrix(nrow = iterations_nb)
+
+splitPerc_nb = .7 #Training / Test split Percentage
+
+for(j in 1:iterations_nb)
+{
+  #Creating Sample at a 70% and %30 Split
+  trainIndices_nb = sample(1:dim(cs_1)[1],round(splitPerc_nb * dim(cs_1)[1]))
+  train_nb = cs_1[trainIndices_nb,]
+  test_nb = cs_1[-trainIndices_nb,]
+  
+  #model_nb = naiveBayes(Attrition~ Department + JobRole + MonthlyIncome + DistanceFromHome, data = train_nb,laplace = 1)
+  #model_nb = naiveBayes(Attrition~ ., data = train_nb,laplace = 1)
+  model_nb = naiveBayes(Attrition~ YearsAtCompany + TotalWorkingYears + YearsSinceLastPromotion + StockOptionLevel + TrainingTimesLastYear + JobLevel + OverTime + Age +YearsInCurrentRole + NumCompaniesWorked + MonthlyIncome +JobRole + DistanceFromHome + Education + Department, data = train_nb,laplace = 1)
+  predictions_nb = (predict(model_nb,test_nb))
+  CM_nb = confusionMatrix(table(predictions_nb, test_nb$Attrition))
+  masterAcc_nb[j] = CM_nb$overall["Accuracy"]
+  Sen_nb[j] = CM_nb$byClass["Sensitivity"]
+  Spec_nb[j] = CM_nb$byClass["Specificity"]
+}
+
+MeanAcc = colMeans(masterAcc_nb)
+MeanSen = colMeans(Sen_nb)
+MeanSpec = colMeans(Spec_nb)
+
+CM_nb
+
